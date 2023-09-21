@@ -2,15 +2,15 @@
 This is the code for article "Gated Parametric Neuron for Spiking Neural Networks"
 ## Code structure
 * **core**
-  * **audio_dataset**: dataset generation
-  * **losses**: loss functions
-  * **methods**: a dropout module
-  * **surrogate**: surrogate function
-  * **tools**: other tools
+  * **audio_dataset.py**: dataset generation
+  * **losses.py**: loss functions
+  * **methods.py**: a dropout module
+  * **surrogate.py**: surrogate function
+  * **tools.py**: other tools
 * **src**
-    * **model**: SNN models
-    * **SHD**: run file for SHD
-    * **SSC**: run file for SSC
+    * **model.py**: SNN models
+    * **SHD.py**: run file for SHD
+    * **SSC.py**: run file for SSC
 ## Experiment
 1. Dataset generation
    ```
