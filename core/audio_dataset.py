@@ -122,27 +122,6 @@ def AUDIO_datasets_split(file_name, save_path, T, transform=False):
 
 
 
-
-
-
-"""
-python audio_dataset.py  -T=20 -data_name='SHD';\
-python audio_dataset.py  -T=50 -data_name='SHD';\
-python audio_dataset.py  -T=100 -data_name='SHD';\
-python audio_dataset.py  -T=150 -data_name='SHD';\
-python audio_dataset.py  -T=200 -data_name='SHD';\
-
-
-python audio_dataset.py  -T=20 -data_name='SSC';\
-python audio_dataset.py  -T=50 -data_name='SSC';\
-python audio_dataset.py  -T=100 -data_name='SSC';\
-python audio_dataset.py  -T=150 -data_name='SSC';\
-python audio_dataset.py  -T=200 -data_name='SSC';\
-python audio_dataset.py  -T=60 -data_name='SSC';\
-
-"""
-
-
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='generate datasets')
