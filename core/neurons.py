@@ -142,6 +142,16 @@ class BaseNode(MemoryModule):
         self.neuronal_reset()
         return self.spike
 
+class IF(BaseNode):
+    def __init__(self, v_threshold: float = 0.5, v_reset: float = 0., input_channels:int = None, 
+                surrogate_function: Callable = surrogate.ATan()):
+        
+        super().__init__(v_threshold, v_reset, surrogate_function)
+
+    def neuronal_charge(self, x: torch.Tensor):
+        
+        self.v = self.v + x
+
 
 class LIF(BaseNode):
     def __init__(self, tau: float = 5., v_threshold: float = 0.5, v_reset: float = 0., input_channels:int = None, 
@@ -156,6 +166,9 @@ class LIF(BaseNode):
 
 
 class RLIF(MemoryModule):
+    """
+    Cuba-LIF
+    """
     def __init__(self, alpha: float = 0.2, beta: float = 0.2, v_threshold: float = 0.5, v_reset: float = 0., input_channels:int = 1024, 
                  surrogate_function: Callable = surrogate.ATan()):
         
@@ -202,6 +215,105 @@ class RLIF(MemoryModule):
         self.neuronal_reset()
 
         return self.spike
+
+
+class ArchAct(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        ctx.save_for_backward(input)
+        output = torch.gt(input, 0.5)
+        return output.float()
+    @staticmethod
+    def backward(ctx, grad_output):
+        input = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        return grad_input
+
+class GLIF(nn.Module):
+    '''
+    GLIF 
+    https://github.com/Ikarosy/Gated-LIF/tree/master
+    '''
+    def __init__(self, T, **kwargs):
+        super(GLIF, self).__init__()
+        self.T = T
+        self.soft_mode = False
+        self.static_gate = True
+        self.static_param = False
+        self.time_wise = True
+        self.param = [0.2, 0.5, 0.5/(self.T*2), 0.5]
+        #c
+        self.alpha, self.beta, self.gamma = [nn.Parameter(- math.log(1 / ((i - 0.5)*0.5+0.5) - 1) * torch.ones(1024, dtype=torch.float))
+                                                 for i in [0.6,0.8,0.6]]
+
+        self.tau, self.Vth, self.leak = [nn.Parameter(- math.log(1 / i - 1) * torch.ones(1024, dtype=torch.float))
+                              for i in self.param[:-1]]
+        self.reVth = nn.Parameter(- math.log(1 / self.param[1] - 1) * torch.ones(1024, dtype=torch.float))
+        #t, c
+        self.conduct = [nn.Parameter(- math.log(1 / i - 1) * torch.ones((self.T, 1024), dtype=torch.float))
+                                   for i in self.param[3:]][0]
+
+    def forward(self, x): #t, b, c,
+        u = torch.zeros(x.shape[1:], device=x.device)
+        out = torch.zeros(x.shape, device=x.device)
+        for step in range(self.T):
+            
+
+            u, out[step] = self.extended_state_update(u, out[max(step - 1, 0)], x[step],
+                                                      tau=self.tau.sigmoid(),
+                                                      Vth=self.Vth.sigmoid(),
+                                                      leak=self.leak.sigmoid(),
+                                                      conduct=self.conduct[step].sigmoid(),
+                                                      reVth=self.reVth.sigmoid())
+        return out
+
+    #[b, c]  * [c]
+    def extended_state_update(self, u_t_n1, o_t_n1, W_mul_o_t_n1, tau, Vth, leak, conduct, reVth):
+        # print(W_mul_o_t_n1.shape, self.alpha[None, :, None, None].sigmoid().shape)
+        if self.static_gate:
+            if self.soft_mode:
+                al, be, ga = self.alpha.view(1, -1).clone().detach().sigmoid(), self.beta.view(1, -1).clone().detach().sigmoid(), self.gamma.view(1, -1).clone().detach().sigmoid()
+            else:
+                al, be, ga = self.alpha.view(1, -1).clone().detach().gt(0.).float(), self.beta.view(1, -1).clone().detach().gt(0.).float(), self.gamma.view(1, -1).clone().detach().gt(0.).float()
+        else:
+            if self.soft_mode:
+                al, be, ga = self.alpha.view(1, -1).sigmoid(), self.beta.view(1, -1).sigmoid(), self.gamma.view(1, -1).sigmoid()
+            else:
+                al, be, ga = ArchAct.apply(self.alpha.view(1, -1).sigmoid()), ArchAct.apply(self.beta.view(1, -1).sigmoid()), ArchAct.apply(self.gamma.view(1, -1).sigmoid())
+
+        # I_t1 = W_mul_o_t_n1 + be * I_t0 * self.conduct.sigmoid()#原先
+        I_t1 = W_mul_o_t_n1 * (1 - be * (1 - conduct[None, :]))
+        u_t1_n1 = ((1 - al * (1 - tau[None, :])) * u_t_n1 * (1 - ga * o_t_n1.clone()) - (1 - al) * leak[None, :]) + \
+                  I_t1 - (1 - ga) * reVth[None, :] * o_t_n1.clone()
+        o_t1_n1 = surrogate.ATan()(u_t1_n1 - Vth[None, :])
+        return u_t1_n1, o_t1_n1
+
+    def _initialize_params(self, **kwargs):
+        self.mid_gate_mode = True
+        self.tau.copy_(torch.tensor(- math.log(1 / kwargs['param'][0] - 1), dtype=torch.float, device=self.tau.device))
+        self.Vth.copy_(torch.tensor(- math.log(1 / kwargs['param'][1] - 1), dtype=torch.float, device=self.Vth.device))
+        self.reVth.copy_(torch.tensor(- math.log(1 / kwargs['param'][1] - 1), dtype=torch.float, device=self.reVth.device))
+
+        self.leak.copy_(- math.log(1 / kwargs['param'][2] - 1) * torch.ones(self.T, dtype=torch.float, device=self.leak.device))
+        self.conduct.copy_(- math.log(1 / kwargs['param'][3] - 1) * torch.ones(self.T, dtype=torch.float, device=self.conduct.device))
+
+
+class PLIF(BaseNode):
+    """
+    https://arxiv.org/abs/2007.05785
+    """
+    def __init__(self, init_tau: float = 5., v_threshold: float = 0.5, v_reset: float = 0., 
+                surrogate_function: Callable = surrogate.ATan()):
+       
+
+        super().__init__(v_threshold, v_reset, surrogate_function)
+        
+        init_w = - math.log(init_tau - 1.)
+        self.w = nn.Parameter(torch.as_tensor(init_w))
+
+    def neuronal_charge(self, x: torch.Tensor):
+       
+        self.v = self.v + (x - (self.v - self.v_reset)) * self.w.sigmoid()
 
 
 class GPN(MemoryModule):
