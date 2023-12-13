@@ -5,7 +5,6 @@ import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 import sys
 sys.path.append("..")
@@ -13,7 +12,6 @@ from core import tools
 from core import neurons
 from core import losses
 import model
-
 
 
 def Parser():
@@ -24,11 +22,11 @@ def Parser():
     parser.add_argument('-batch_size', default=1024, type=int, help='batch size')
     parser.add_argument('-epochs', default=300, type=int, metavar='N',help='number of total epochs to run')
     parser.add_argument('-lr', default=1e-3, type=float, help='learning rate')
-    parser.add_argument('-repeat', default=3, type=int, help='repeat nums')
+    parser.add_argument('-repeat', default=1, type=int, help='repeat nums')
 
     parser.add_argument('-data_path', default='/mnt/data1/hrwang/dataset/', type=str, help='root path of dataset')
     parser.add_argument('-data_name', default='SSC', type=str, help='dataset name')
-    parser.add_argument('-out_dir', type=str, default='/mnt/data1/hrwang/output/', help='root dir for saving logs and checkpoint')
+    parser.add_argument('-out_dir', type=str, default='/mnt/data1/hrwang/GPN/output/', help='root dir for saving logs and checkpoint')
 
     parser.add_argument('-neuron_func', default=None, help='snn neuron')
     parser.add_argument('-loss_func', default=None, help='loss function') 
@@ -55,14 +53,23 @@ def main_val(args,i):
     
     if args.neuron_func == 'GPN':
         neuron = neurons.GPN
+    elif args.neuron_func == 'IF':
+        neuron = neurons.IF
     elif args.neuron_func == 'LIF':
         neuron = neurons.LIF
     elif args.neuron_func == 'RLIF':
         neuron = neurons.RLIF
+    elif args.neuron_func == 'GLIF':
+        neuron = neurons.GLIF
+    elif args.neuron_func == 'PLIF':
+        neuron = neurons.PLIF
 
     if args.loss_func == 'mean':
         loss_func = losses.CE_mean
-        model_func = model.SNN_base_3_1024
+        if args.neuron_func == 'GLIF':
+            model_func = model.SNN_base_3_1024_GLIF
+        else:
+            model_func = model.SNN_base_3_1024
     elif args.loss_func == 'last':
         loss_func = losses.CE_last
         model_func = model.SNN_base_1_1024
@@ -76,10 +83,10 @@ def main_val(args,i):
     train_dataset,val_dataset,test_dataset = tools.F_audio_datasets(args.data_name,args.data_path,args.T)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,drop_last=False,num_workers=1,pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,drop_last=False,num_workers=1,pin_memory=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size,shuffle=False,drop_last=False,num_workers=1,pin_memory=True)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+    del test_dataset
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
     
     start_epoch = 0
-    writer = SummaryWriter(os.path.join(out_dir), purge_step=start_epoch)
 
     early_stopping = tools.F_EarlyStopping_val(patience=10, path=out_dir+'/checkpoint.pt')
 
@@ -119,8 +126,6 @@ def main_val(args,i):
             
         train_loss /= train_batch
         train_acc /= train_samples
-        writer.add_scalar('train_loss', train_loss, epoch)
-        writer.add_scalar('train_acc', train_acc, epoch)
 
         lr_scheduler.step(train_loss)
         
@@ -148,7 +153,6 @@ def main_val(args,i):
                 tools.F_reset_all(net)
                 
         val_acc /= val_samples
-        writer.add_scalar('val_acc', val_acc, epoch)
 
         print("epoch:%d  train_loss:%.4f  train_acc:%.3f  val_acc:%.3f  time:%.1fs"%(epoch,train_loss,100*train_acc,100*val_acc,time.time()-start_time))
 
@@ -161,6 +165,11 @@ def main_val(args,i):
         if args.loss_func == 'last':
             if epoch in [0,4,9,24,49]:
                 torch.save(net.state_dict(), out_dir+'/model_'+str(epoch)+'.pt')
+    
+
+    train_dataset,val_dataset,test_dataset = tools.F_audio_datasets(args.data_name,args.data_path,args.T)
+    del train_dataset,val_dataset,train_loader,val_loader
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size,shuffle=False,drop_last=False,num_workers=1,pin_memory=True)
     
     net.load_state_dict(torch.load(out_dir+'/checkpoint.pt'))
     net.eval()
@@ -182,11 +191,14 @@ def main_val(args,i):
 
             tools.F_reset_all(net)
 
+
     test_acc /= test_samples           
     
     print('\n-----------------')
     print('test acc%.3f'%(100*test_acc))
     print('-----------------\n')
+
+
 
     return test_acc*100
 
@@ -196,9 +208,11 @@ if __name__ == '__main__':
 
     args = Parser()
 
+
     acc = []
     for i in range(args.repeat):
         
+
         tools.F_init_seed(202302+i)
         acc.append(main_val(args,i))
     mean = np.mean(np.array(acc))
