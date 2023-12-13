@@ -5,7 +5,6 @@ import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 import sys
 sys.path.append("..")
@@ -24,11 +23,11 @@ def Parser():
     parser.add_argument('-batch_size', default=128, type=int, help='batch size')
     parser.add_argument('-epochs', default=150, type=int, metavar='N',help='number of total epochs to run')
     parser.add_argument('-lr', default=5e-4, type=float, help='learning rate')
-    parser.add_argument('-repeat', default=3, type=int, help='repeat nums')
+    parser.add_argument('-repeat', default=1, type=int, help='repeat nums')
 
     parser.add_argument('-data_path', default='/mnt/data1/hrwang/dataset/', type=str, help='root path of dataset')
     parser.add_argument('-data_name', default='SHD', type=str, help='dataset name')
-    parser.add_argument('-out_dir', type=str, default='/mnt/data1/hrwang/output/', help='root dir for saving logs and checkpoint')
+    parser.add_argument('-out_dir', type=str, default='/mnt/data1/hrwang/GPN/output/', help='root dir for saving logs and checkpoint')
 
     parser.add_argument('-neuron_func', default=None, help='snn neuron')
     parser.add_argument('-loss_func', default=None, help='loss function') 
@@ -49,6 +48,7 @@ def main_val(args,i):
     os.mkdir(out_dir)
     print(f'\nMake dir {out_dir}')
 
+
     print('\nval mode')
     print('\ndataset:%s  neuron:%s  loss:%s'%(args.data_name,args.neuron_func,args.loss_func))
     print('\nLR:%s  T:%d  batch:%d  epochs:%d\n'%(str(args.lr),args.T,args.batch_size,args.epochs))
@@ -56,10 +56,16 @@ def main_val(args,i):
     
     if args.neuron_func == 'GPN':
         neuron = neurons.GPN
+    elif args.neuron_func == 'IF':
+        neuron = neurons.IF
     elif args.neuron_func == 'LIF':
         neuron = neurons.LIF
     elif args.neuron_func == 'RLIF':
         neuron = neurons.RLIF
+    elif args.neuron_func == 'GLIF':
+        neuron = neurons.GLIF
+    elif args.neuron_func == 'PLIF':
+        neuron = neurons.PLIF
 
     if args.loss_func == 'mean':
         loss_func = losses.CE_mean
@@ -67,7 +73,10 @@ def main_val(args,i):
         loss_func = losses.CE_last
 
     device=torch.device('cuda')
-    net=model.SNN_base_1_1024(T=args.T,dataset=args.data_name,single_step_neuron=neuron).to(device)
+    if args.neuron_func == 'GLIF':
+        net=model.SNN_base_1_1024_GLIF(T=args.T,dataset=args.data_name,single_step_neuron=neuron).to(device)
+    else:
+        net=model.SNN_base_1_1024(T=args.T,dataset=args.data_name,single_step_neuron=neuron).to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.75, patience=3, verbose=True)
     
@@ -78,7 +87,6 @@ def main_val(args,i):
 
 
     start_epoch = 0
-    writer = SummaryWriter(os.path.join(out_dir), purge_step=start_epoch)
 
     early_stopping = tools.F_EarlyStopping_val(patience=10, path=out_dir+'/checkpoint.pt')
 
@@ -118,8 +126,6 @@ def main_val(args,i):
             
         train_loss /= train_batch
         train_acc /= train_samples
-        writer.add_scalar('train_loss', train_loss, epoch)
-        writer.add_scalar('train_acc', train_acc, epoch)
 
         lr_scheduler.step(train_loss)   
         
@@ -146,7 +152,6 @@ def main_val(args,i):
                 tools.F_reset_all(net)
                 
         val_acc /= val_samples
-        writer.add_scalar('val_acc', val_acc, epoch)
 
         print("epoch:%d  train_loss:%.4f  train_acc:%.3f  val_acc:%.3f  time:%.1fs"%(epoch,train_loss,100*train_acc,100*val_acc,time.time()-start_time))
 
@@ -179,12 +184,13 @@ def main_val(args,i):
             test_acc += np.sum((label == idx).cpu().numpy())
 
             tools.F_reset_all(net)
-            
+
     test_acc /= test_samples           
     
     print('\n-----------------')
     print('test acc%.3f'%(100*test_acc))
     print('-----------------\n')
+
 
     return test_acc*100
 
