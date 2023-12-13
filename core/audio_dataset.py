@@ -122,6 +122,9 @@ def AUDIO_datasets_split(file_name, save_path, T, transform=False):
 
 
 
+
+
+
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='generate datasets')
@@ -135,6 +138,7 @@ if __name__ == '__main__':
 
     tools.F_init_seed(2023)
 
+    
     args.train_set_pth = os.path.join(args.data_path+args.data_name+'/cache/', f'train_set_{args.T}')
     args.test_set_pth = os.path.join(args.data_path+args.data_name+'/cache/', f'test_set_{args.T}')
     args.val_set_pth = os.path.join(args.data_path+args.data_name+'/cache/', f'val_set_{args.T}')
