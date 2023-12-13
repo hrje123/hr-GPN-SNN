@@ -7,7 +7,8 @@ import os
 import random
 import joblib
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, random_split
+from torchvision import datasets, transforms 
 
 
 class F_EarlyStopping_val:
@@ -99,40 +100,3 @@ def F_reset_all(net: nn.Module):
 
 
 
-
-
-
-# def F_audio_datasets(data_name,data_path,T,mode):
-
-#     test_set_x = joblib.load(os.path.join(data_path+data_name+'/cache/', f'test_set_{T}_x.npz'))
-#     test_set_y = joblib.load(os.path.join(data_path+data_name+'/cache/', f'test_set_{T}_y.npz'))
-#     testset = dataset_torch(test_set_x,test_set_y)
-#     del test_set_x,test_set_y
-
-#     if mode == 'val':
-#         train_set_x = joblib.load(os.path.join(data_path+data_name+'/cache/', f'train_set_{T}_x.npz'))
-#         train_set_y = joblib.load(os.path.join(data_path+data_name+'/cache/', f'train_set_{T}_y.npz'))
-#         trainset = dataset_torch(train_set_x,train_set_y)
-#         del train_set_x,train_set_y
-
-#         val_set_x = joblib.load(os.path.join(data_path+data_name+'/cache/', f'val_set_{T}_x.npz'))
-#         val_set_y = joblib.load(os.path.join(data_path+data_name+'/cache/', f'val_set_{T}_y.npz'))
-#         valset = dataset_torch(val_set_x,val_set_y)
-#         del val_set_x,val_set_y
-
-#         return trainset,valset,testset
-    
-#     elif mode == 'test':
-#         if data_name == 'SHD':
-#             train_set_x = joblib.load(os.path.join(data_path+data_name+'/cache/', f'ori_train_set_{T}_x.npz'))
-#             train_set_y = joblib.load(os.path.join(data_path+data_name+'/cache/', f'ori_train_set_{T}_y.npz'))
-#             trainset = dataset_torch(train_set_x,train_set_y)
-#             del train_set_x,train_set_y
-
-#         elif data_name == 'SSC':
-#             train_set_x = joblib.load(os.path.join(data_path+data_name+'/cache/', f'train_set_{T}_x.npz'))
-#             train_set_y = joblib.load(os.path.join(data_path+data_name+'/cache/', f'train_set_{T}_y.npz'))
-#             trainset = dataset_torch(train_set_x,train_set_y)
-#             del train_set_x,train_set_y
-            
-#         return trainset,testset
